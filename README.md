@@ -42,6 +42,28 @@ attention-mean pooling (384-d) → MLP head → logit → sigmoid → p(complete
 p ≥ τ (0.5)  →  COMPLETE: agent responds     |     p < τ  →  INCOMPLETE: keep listening
 ```
 
+## Demo
+
+A Gradio app ships in [`app/`](app/) — **tested and verified working**
+(selftest PASS on test-B clips + UI booted locally). Record from your mic or
+upload a file and get: verdict, p(complete), ONNX inference ms, and a TEN VAD
+trailing-silence readout. Two knobs worth playing with:
+
+- **Model selector** — fp32 (bit-faithful) vs int8 (9 MB) ONNX.
+- **Trailing-context slider (0.5–8 s)** — simulated streaming: show the model
+  only the last b seconds and watch the verdict flip (mirrors the P6 latency
+  curve; the model commits on 2–4 s windows).
+
+```powershell
+uv run python app/app.py --selftest    # headless check -> prints SELFTEST PASS
+uv run python app/app.py               # UI at http://127.0.0.1:7860
+```
+
+Model files resolve locally first, then auto-download from
+[HF Hub](https://huggingface.co/Shrey160/hinglish-turn-v2) — so the app also
+runs standalone on any machine (`pip install -r app/requirements.txt`).
+Details, UI controls, and Space/self-hosting options: [`app/README.md`](app/README.md).
+
 ## Training recipe (two-stage transfer)
 
 1. **Stage 1** — frozen whisper-tiny encoder, head trained on Smart Turn
