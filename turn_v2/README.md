@@ -31,6 +31,9 @@ turn_v2/
 ├── train.py            # two-stage trainer (s1/s2), overfit gate, KD flags, results.csv logger
 ├── evaluate.py         # acc/F1 + per-language/filler slices + latency
 ├── export.py           # ONNX fp32 + int8 static QDQ (held-out dev calibration)
+├── latency.py          # P6: acc/F1 vs trailing-context budget curve (v2 + zero-shot)
+├── policy.py           # P6: threshold sweep → FIR vs HOLD Pareto frontier
+├── eval_common.py      # shared P6 eval helpers (ref session, predict_both, confusion)
 ├── ckpt/<run_id>/best.pt
 ├── kd/                 # teacher logits (npz) + teacher run logs
 ├── onnx/               # s2-004.fp32.onnx (30.9 MiB) + s2-004.int8.entropy-quint8.onnx (9.05 MB)
@@ -46,7 +49,10 @@ turn_v2/
   re-implemented)
 - Labels: `endpoint_bool` (1 = complete = agent should respond);
   `midfiller`/`endfiller` preserved from folder names
-- Features: whisper log-mel, `(80, 800)` via `chunk_length=8`
+- Features: whisper log-mel, `(80, 800)` via `chunk_length=8`.
+  **Convention note:** v2 mels are unnormalized (`do_normalize=False` —
+  transformers 5 default drift, self-consistent across train/eval/export);
+  reference-model evals must pass `normalize=True` (HARDPOINT 2026-08-29).
 
 Label folders parse as `complete|incomplete[-midfiller][-endfiller]`
 (Python-bool casing, e.g. `incomplete-False-True`).
@@ -128,6 +134,46 @@ int8 recipe = reference-faithful: `quant_pre_process` + QDQ, per-channel,
 QUInt8/QInt8, Entropy, **Conv/MatMul/Gemm only** — replicating it fixed the
 −8.8 AVX2 U8S8 cliff (HARDPOINT 2026-08-29). Result tables in `results.md`.
 
+### latency.py (P6)
+
+| Arg | Default | Notes |
+|---|---|---|
+| `--ckpt` | `ckpt/s2-004/best.pt` | v2 model under test |
+| `--budgets` | `0.5 1 2 4 8` | trailing-context seconds (keep LAST b s, front-pad to 8 s) |
+| `--splits` | `test_a test_b test_c` | |
+| `--max`, `--batch-size`, `--workers` | 0/128/0 | `--max` = cap per split (smoke) |
+
+Evals v2-core (torch) + zero-shot reference (ONNX) per split × budget →
+`results/latency_curve.csv`. b=8 rows must reproduce the thesis numbers
+(anchor check). Zero-shot uses normalized features (reference convention).
+
+### policy.py (P6)
+
+| Arg | Default | Notes |
+|---|---|---|
+| `--ckpt` | `ckpt/s2-004/best.pt` | |
+| `--taus` | 0.05…0.95 step 0.05 | decision thresholds |
+| `--splits`, `--max`, `--batch-size`, `--workers` | A/B/C, 0, 128, 0 | |
+
+Sweeps τ on v2 probs: FIR = P(pred complete \| incomplete) (costly false
+interrupt) vs HOLD = P(pred incomplete \| complete) (added-latency proxy);
+prints the Pareto frontier + knee and writes `results/policy_sweep_<split>.csv`
++ `results/policy_frontier_<split>.csv`. Reference operating point (τ=0.5)
+reported on the same features.
+
+### scripts/error_analysis.py (P6)
+
+| Arg | Default | Notes |
+|---|---|---|
+| `--slices-splits` | `test_a test_b test_c` | confusion slices (both models) → `results/slices_v2core.csv` |
+| `--fail-splits` | `test_b test_c` | failure pull → `results/error_analysis_failures.csv` |
+| `--max-c-fails` | 30 | stratified balanced cap per test-C failing-model group (seed 42) |
+| `--skip-slices` | off | failures only |
+
+Categorizes failures (tail-cue / filler-confusion / domain-gap / other) with
+per-clip duration + trailing-silence stats; zero-shot-only failures kept as a
+separate `failed_model=zs` group for contrast.
+
 ### scripts/eval_onnx.py
 
 | Arg | Notes |
@@ -168,13 +214,20 @@ Use it for relative model ranking, not absolute thresholds.
 
 ## Status / open items
 
-- P0–P5 complete. **v2-core = s2-004** (attention-mean, k=2, replay 0.5):
-  test-A 0.882/0.886, test-B 0.970/0.968, test-C 0.600/0.446.
-- P5 closed: KD negative (teacher whisper-small s2-013 beats student but KD
-  itself hurt — see results.md); ONNX fp32 bit-faithful + int8 9.05 MB at
-  −2.5/−3.0/+0.4 (documented deviation from the ≤8 MB/≤1% target).
-- Next: P6 (`latency.py` trailing-context curve, `policy.py` Pareto frontier,
-  error analysis) → P7 (Gradio demo on fp32/int8 ONNX, HF Hub, report).
+- **P0–P7 complete — project shipped.** v2-core = **s2-004** (attention-mean,
+  k=2, replay 0.5): test-A 0.882/0.886, test-B 0.970/0.968, test-C 0.600/0.446.
+  Weights: https://huggingface.co/Shrey160/hinglish-turn-v2 · report: `../REPORT.md`.
+- P7: `app.py` demo (fp32/int8 selector, τ + trailing-context sliders, TEN VAD
+  gate, `--selftest`); HF Space deferred — Gradio Spaces are PRO-gated (402),
+  `scripts/upload_hf.py --space` ready if that changes.
+- P6 closed: trailing-context curve (v2 needs ~2–4 s; truncation fails toward
+  HOLD, zero-shot toward FIR), policy frontier (keep τ=0.5; knee 0.45; τ=0.7
+  FIR-averse), slices + 83 categorized failures (results.md §P6).
+- Feature conventions (HARDPOINT 2026-08-29): v2 mels are **unnormalized**
+  (transformers 5 default drift) — self-consistent across train/eval/export;
+  reference-model evals must use `TurnDataset(normalize=True)`. Normalized
+  retraining = future work. Our exported ONNX outputs **logits** (reference
+  outputs sigmoid) — consumers must apply sigmoid.
 - torch is now **2.13.0+cu126 (CUDA)** — GPU runs take minutes; CPU still
   works. Keep `--workers 4` for dataloaders; one background job at a time.
 - Re-running experiments: `uv run python -m turn_v2.train --help`; exact run

@@ -158,7 +158,7 @@ def load_audio(path):
     return audio.astype(np.float32)
 
 
-def to_features(audio):
+def to_features(audio, do_normalize=False):
     audio = truncate_audio_to_last_n_seconds(audio, n_seconds=8, sample_rate=SAMPLE_RATE)
     fe = get_feature_extractor()
     out = fe(
@@ -168,6 +168,7 @@ def to_features(audio):
         padding="max_length",
         max_length=8 * SAMPLE_RATE,
         truncation=True,
+        do_normalize=do_normalize,
     )["input_features"]
     feat = np.asarray(out, dtype=np.float32)
     if feat.ndim == 3 and feat.shape[0] == 1:
@@ -178,10 +179,16 @@ def to_features(audio):
 class TurnDataset(Dataset):
     """Clips -> (80, 800) log-mel on demand; optional on-the-fly waveform augmentation."""
 
-    def __init__(self, clips, augment=None, cache=False):
+    def __init__(self, clips, augment=None, cache=False, truncate_s=None, normalize=False):
         self.clips = list(clips)
         self.augment = augment
         self.cache = cache
+        self.truncate_s = truncate_s  # keep LAST n s before the shared 8 s contract (P6 latency curve)
+        # normalize=False is the v2 convention (transformers 5 default silently dropped
+        # do_normalize; v2 models trained/eval'd self-consistently without it). The
+        # reference model's native path is do_normalize=True — use normalize=True for
+        # zero-shot reference evals (see HARDPOINT 2026-08-29 feature-convention entry).
+        self.normalize = normalize
         self._cache = {}
 
     def __len__(self):
@@ -200,13 +207,20 @@ class TurnDataset(Dataset):
                 "path": c["rel"],
             }
         audio = load_audio(c["path"])
+        if self.truncate_s is not None:
+            # keep LAST b s (b may be fractional); front zero-pad to 8 s is applied
+            # by to_features' shared contract — equivalent to composing
+            # truncate_audio_to_last_n_seconds(b) then (8), which can't take float b
+            n = int(round(self.truncate_s * SAMPLE_RATE))
+            if n > 0:
+                audio = audio[-n:]
         if self.augment is not None:
             audio = self.augment(audio)
-        feat = to_features(audio)
+        feat = to_features(audio, do_normalize=self.normalize)
         if self.cache:
             self._cache[idx] = feat
         return {
-            "input_features": to_features(audio),
+            "input_features": feat,
             "label": c["label"],
             "lang": c["lang"],
             "midfiller": c["midfiller"],

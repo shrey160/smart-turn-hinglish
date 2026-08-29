@@ -1,5 +1,10 @@
 """Evaluate existing ONNX files on a split without re-quantizing.
 
+NOTE: for turn_v2-exported models only (export.py outputs LOGITS, thresholded
+`> 0`). Do NOT pass the reference `smart-turn-v3.2-cpu.onnx` — it outputs
+sigmoid probabilities and every clip would read as complete (use
+scripts/eval_baselines.py or turn_v2.eval_common.predict_both for that).
+
 Usage:
   uv run python scripts/eval_onnx.py --split test_a --paths a.fp32.onnx a.int8.onnx
 """

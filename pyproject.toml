@@ -21,6 +21,8 @@ dependencies = [
     "edge-tts>=7.2.8",
     "onnxscript>=0.7.1",
     "torch==2.13.0+cu126",
+    "gradio>=6.26.0",
+    "ten-vad>=1.0.6.8",
 ]
 
 [tool.uv]
