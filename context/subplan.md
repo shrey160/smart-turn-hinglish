@@ -1,40 +1,39 @@
-# Subplan — Phase 4 (P3: Two-stage reproduction)
+# Subplan — Phase 6 (P5: Distillation + deployment)
 
-> Mutable task breakdown for the CURRENT phase only. Previous phases:
-> phase1/P0 ✅, phase2/P1 ✅, phase3/P2 ✅ (closed per pivot: TTS scale-up,
-> test-B 600, listening gate cancelled; test-C build carried into this phase).
+> Previous phases: P0 ✅ · P1 ✅ · P2 ✅ · P3 ✅ (two-stage repro + test-C) ·
+> P4 ✅ (ablations; v2-core = s2-004 unchanged).
+> **P5 ✅ (Session 9) — KD negative (ship s2-004 per timebox); int8 exported
+> with documented −2.5/−3.0/+0.4 delta; TEN VAD deferred to P7.**
 
-## SP1 — turn_v2 skeleton
-- [ ] `turn_v2/data/dataset.py`: folder-layout loading, label/filler parsing,
-      8 s contract via `smart_turn_reference/audio_utils`, dev-manifest support
-      (`data/splits/dev_v1.csv`), replay-sampler support for s2
-- [ ] `turn_v2/data/augment.py`: telephony bandpass / noise 10–20 dB / speed
-      0.9–1.1×, p≈0.5, applied in `__getitem__`
-- [ ] `turn_v2/models/model.py` + `pooling.py`: whisper-tiny frozen encoder +
-      attention-mean head
-- [ ] `turn_v2/train.py`: `--stage s1|s2`, `--init-ckpt`, `--overfit 100`,
-      batch pos_weight BCE, cosine schedule, seeds 42, results.csv logging
-      (schema v2: stage + init_ckpt columns; backfill p1 rows as baseline)
-- [ ] `turn_v2/evaluate.py`: dev + test-A/B(/C), acc/F1 + per-lang/filler slices
+## SP1 — WS-A teacher track
+- [x] `--base` + KD flags in train.py (`--kd-teacher/--kd-alpha/--kd-temp`,
+      soft-BCE KD loss, logits npz loader, base threaded to ckpt)
+- [x] `scripts/precompute_teacher_logits.py` (s2-pool clean-audio logits → npz)
+- [x] Teacher s1: whisper-small, hin+eng 7,200, lr 5e-5, 4 ep → `s1-004`
+      (dev 0.913 / test-A 0.902/0.904 — CUDA torch made this ~5.5 min)
+- [x] Teacher s2: approved recipe from `s1-004` → `s2-013`
+      (test-A 0.913 / test-B 1.000 / test-C 0.603)
+- [x] Precompute teacher logits → `turn_v2/kd/teacher_logits.npz` (7,409 clips)
+- [x] Student KD s2: init ckpt_s1-001 + teacher logits (T=3, α=0.5) → `s2-014`
+- [x] KD verdict vs s2-004 on test-A/B/C: **NEGATIVE** (control s2-015 isolates
+      the harness confound; KD −0.9 test-A, test-B tie) → ship s2-004
 
-## SP2 — Sanity gate
-- [ ] `--overfit 100`: loss → ~0 on 100 samples (blocks all full runs)
+## SP2 — WS-B export + int8
+- [x] `turn_v2/export.py`: ONNX fp32 export (opset 18, dynamic batch; bit-faithful)
+- [x] int8 static QDQ with held-out dev calibration (200 dev_v1 clips) +
+      `quant_pre_process` + Conv/MatMul/Gemm-only (reference recipe; fixed the
+      −8.8 AVX2 cliff)
+- [x] fp32 vs int8 eval on test-A/B/C: −2.5 / −3.0 (1 clip) / +0.4 acc;
+      9.05 MB int8; p50 17.7→13.2 ms
+- [x] AVX2 U8S8 cliff: found and fixed (rr no-op here; qint8-act catastrophic;
+      minmax/u8u8/calib-1024 = no gain — noise floor, documented)
 
-## SP3 — Stage 1 run
-- [ ] Train s1: hin+eng train_pool minus dev_v1 (~7,200), lr 5e-5, 4 ep,
-      frozen encoder → `ckpt_s1` (select on dev_v1 hin+eng F1)
-- [ ] Eval ckpt_s1 on dev + test-A + test-B → results.csv row `s1-001`
+## SP3 — Docs + phase close
+- [x] results.md P5 section (KD verdict table + quantization table + deviation note)
+- [x] results.csv rows s1-004/s2-013/s2-014/s2-015; progress.md Session 9
+- [x] masterplan P5 checkboxes + exit-criteria deviation; HARDPOINT int8 entry
 
-## SP4 — Stage 2 run
-- [ ] Stats-QC admission of 100 pilot clips (labels/durations/16 kHz mono)
-- [ ] TTS dev carve: ~23 clips (10%, seed 42) → `data/splits/dev_tts_v1.csv`
-- [ ] Train s2: init `ckpt_s1`, 232 TTS ×2 upsample + 50:50 hin/eng replay
-      (fresh seeded draw each epoch), lr 1e-5, 2 ep → `ckpt_s2`
-- [ ] Eval ckpt_s2 on dev + A/B → thesis table v2 in `turn_v2/results.md`
-      (rows: zero-shot vs s1 vs s2)
-
-## SP5 — test-C build (parallel workstream)
-- [ ] Download 1 MUCS test parquet (~295 MB) → extract 1–2 h utterance subset
-      → delete parquet
-- [ ] Incomplete clips via torchaudio forced alignment; fallback = complete-heavy
-- [ ] Eval ckpt_s1 + ckpt_s2 on test-C → add testC columns to s1/s2 rows
+## Exit
+- KD verdict recorded: **negative → ship s2-004** (timebox rule).
+- int8 ≤ 8 MB **missed narrowly** (9.05 MB) with delta ≤ ~1% **missed**
+  (−2.5 test-A) — deviation documented; artifacts + docs current.

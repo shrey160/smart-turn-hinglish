@@ -233,3 +233,183 @@ the full mixed pool" to a **two-stage transfer recipe**:
 - TTS dev carve ~23 clips (10%, seed 42) gives s2 an in-domain early-stop signal.
 - Pivot framed as an approach **probe**: invest in TTS scale-up only if s2 shows
   test-B gains.
+
+## Session 6 — 2026-08-29: P3 complete (skeleton → gate → s1 → s2 ladder, exit MET)
+
+### Done
+1. **Created `context/HARDPOINT.md`** (initialized; 2 entries this session).
+2. **SP1 skeleton built** (`turn_v2/`): `data/dataset.py` (folder/manifest splits,
+   8 s contract imported from reference, on-demand (80,800) log-mel, collate,
+   TTS dev carve), `data/augment.py` (telephony highpass300/lowpass3400 — playbook
+   §7.4 snippet fixed, it passed 3400 as Q — noise 10–20 dB SNR, speed 0.9–1.1×,
+   p≈0.5 pre-contract), `models/pooling.py` (attention-mean/ASP/asp-end, N(0,0.1)
+   init mirrored from reference), `models/model.py` (frozen whisper-tiny encoder;
+   mel-length check fixed for transformers 5 by setting max_source_positions=400
+   and keeping pretrained pos-emb rows 0–399), `train.py` (plain loop, batch
+   pos_weight BCE, warmup+cosine, per-epoch eval, best-ckpt on dev F1, early stop,
+   results.csv schema v2), `evaluate.py` (slices + e2e/fwd latency p50).
+3. **SP2 gate**: `--overfit 100` → FAIL at locked 5e-5 (stall ~0.67 loss), PASS at
+   lr 1e-3 (train_f1 1.000, loss 0.0024) — root cause + open question logged in
+   HARDPOINT (head-only needs higher lr than full-encoder reference lrs).
+4. **SP3 s1-001**: 7,200 clips, 4 ep, frozen encoder → dev 0.851 / test-A
+   0.833/0.829 / test-B 0.727/0.571 (~12 min CPU, workers 4).
+5. **SP4 s2 ladder** (all init ckpt_s1, 209 TTS ×2 + 50:50 replay = 836/epoch):
+   s2-001 locked 1e-5 → flat, test-B 0.727/0.571 (HARDPOINT entry; needs user
+   sign-off to supersede locked hyper); s2-002 lr 1e-4 → 0.758/0.692; s2-003
+   +3 ep → 0.788/0.741 (acc ties zero-shot); **s2-004 +unfreeze-last-2 →
+   test-B 0.970/0.968, test-A 0.882/0.886, dev 0.884**.
+6. **P3 exit criteria MET by s2-004** (test-B beats zero-shot; test-A no
+   regression vs s1). Thesis table v2 in `turn_v2/results.md`; 5 results.csv rows
+   (schema v2; p1 rows backfilled baseline/none and de-malformed).
+7. Stats-QC admission of 232 TTS clips: 16 kHz mono ✓, 110:122 labels,
+   mean 5.57 s; `data/splits/dev_tts_v1.csv` (23 clips, seed 42) written.
+8. **User sign-off received** (same day): §4 amendment approved — s2 recipe is
+   lr 1e-4, 3 ep, unfreeze-last-2; ARM-4 → k-sweep (k=1/4/all) in masterplan;
+   HARDPOINT entry #2 marked RESOLVED.
+9. **`turn_v2/README.md` written** (layout, contract, quickstart, full CLI
+   tables, module notes, open items) and `results.csv` p1 rows de-malformed
+   (20 → 19 fields; all rows now parse clean — `pandas` table verified).
+10. **Session closed** — P3 complete except SP5 (test-C).
+
+### Pending / next session
+- [ ] **SP5 test-C build** (MUCS `dianavdavidson/MUCS-Hinglish`: 1 test parquet
+      ~295 MB → 1–2 h subset → delete parquet; forced-alignment vs complete-heavy
+      fallback TBD; ~100–150 MB permanent) → eval s1-001 + s2-004 on test-C,
+      fill testC columns; validates s2-004 test-B is not TTS-pipeline overfit
+- [ ] P4 arms: pooling (ASP / asp-end = full s1+s2 rerun), ARM-4 k-sweep
+      (k=1/4/all), label smoothing, ARM-5 replay-ratio (s2-only)
+
+## Session 7 — 2026-08-29: SP5 test-C built + evaluated; real domain gap found
+
+### Done
+1. Downloaded MUCS-Hinglish test parquet #0 (294.6 MB) → built `data/test_c/`:
+   846 clips / 76.8 min / 17 speakers / 50:50 (434 complete + 412 incomplete)
+   → parquet deleted (net +107 MB; total data ~1.4 GB, under cap).
+   Builder `scripts/build_test_c.py`; manifest `data/splits/test_c_manifest.csv`.
+2. Two construction artifacts found & fixed mid-build (HARDPOINT entry):
+   (a) valley cuts made incompletes end in silence → switched to speech-active
+   cuts; (b) MUCS completes are tight-trimmed (0.000 s median tail) → 200 ms
+   pad per repo convention; (c) class-overlap + rng-state determinism bugs.
+3. Evaluated zero-shot + s1-001 + s2-004 on test-C (testC columns now in
+   results.csv for all rows): zs 0.539/0.573, s1 0.541/0.279, s2-004
+   **0.600/0.446**, silence-threshold 0.921/0.928 (T=0.15).
+4. Diagnosed the collapse (results.md test-C section): v3.2 models are
+   prosody-first (test-A completes: median 0.18 s tail, 25% zero) and MUCS
+   tutorial monologue lacks turn-taking prosody; neural operating points need
+   >0.3 s tails vs our 0.2 s pad. Energy cue is trivially exploitable (pad).
+5. Docs updated: results.md (test-C section + findings), subplan (SP5 done,
+   phase closed), HARDPOINT (Session 7 entry), README turn_v2 (test_c split +
+   caveat), masterplan (P3 fully done incl. test-C).
+
+### Pending / next session
+- [ ] P4 phase plan (`context/phases/phase5.md`) + fresh subplan: pooling arms
+      (ASP/asp-end), ARM-4 k-sweep (k=1/4/all), label smoothing, ARM-5
+      replay-ratio (s2-only) — all report on A/B/C
+- [ ] Optional test-C v2 (if found): real conversational Hinglish calls instead
+      of tutorial monologue; or accept v1 as stress test (relative rankings)
+
+### Key decisions
+- **test-C v1 shipped as-is**: structurally consistent with v3.2 conventions;
+  neural-model collapse is a genuine domain-gap finding, not a blocker —
+  s2-004 remains the ship candidate (best neural on B and C, strong on A).
+- Forced-alignment labeling dropped (MMS_FA 1.2 GB + Windows perl dependency);
+  transcript-guided speech-active cuts achieve the same goal deterministically.
+- MUCS incompletes end mid-speech (mid-word cuts allowed — they model a user
+  still talking; the "never cut mid-word" rule applies to generated complete
+  clips, not realism cuts).
+
+## Session 9 — 2026-08-29: P5 complete (KD negative, int8 shipped with documented deviation)
+
+> Session began with crash recovery: a previous session died mid-teacher-run
+> (UnboundLocalError in train.py) and a quant sweep was killed mid-flight from
+> Task Manager (system slowdown) — artifacts were intact; both were recovered.
+
+### Done
+1. **Fixed the crashed teacher run**: `import numpy as np` inside the KD branch
+   of `train()` shadowed the module-level import → `UnboundLocalError` at
+   `np.random.seed` before KD ever loaded. Removed the local import; smoke
+   tested (`--overfit 4` gets past the crash point).
+2. **CUDA torch swapped in** (user call, CPU teacher was too slow):
+   torch 2.13.0+cu126 + torchaudio 2.11.0+cu126 via uv (cu124 index has no
+   2.13.0; cu130 lacks torchaudio 2.13). biquad ops + CUDA smoke verified;
+   torchaudio skew unchanged (2.11 vs 2.13, verified working).
+3. **Teacher trained on GPU** (~5.5 min vs 1.5 h CPU budget):
+   s1-004 whisper-small (dev 0.913, test-A 0.902/0.904) → s2-013 approved
+   recipe (test-A 0.913/0.915, test-B 1.000/1.000, test-C 0.603/0.541) —
+   teacher beats the student everywhere.
+4. **Teacher logits precomputed** (7,409 clips → kd/teacher_logits.npz;
+   script fixed: device-aware, `.to(device)`, unicode paths — no pickle).
+5. **KD student s2-014** (T=3, α=0.5): test-B parity (0.970) but test-A
+   0.837. **No-KD control s2-015** (same harness, replay 626/ep): test-A
+   0.846 — **KD verdict NEGATIVE** (−0.9 acc vs control, −4.5 vs s2-004).
+   Ship = **s2-004** per the P5 timebox. One arg-quoting crash along the way
+   (unquoted `--change-summary` with spaces) — relaunched with quotes.
+6. **export.py WS-B run to completion**: fp32 ONNX (opset 18, dynamic batch)
+   **bit-faithful** (0.882/0.970/0.600). First int8 (all-ops QDQ) hit the
+   predicted **AVX2 U8S8 cliff** (−8.8 test-A); reduce_range no-op,
+   qint8-act catastrophic (0.574). **Fix = reference recipe**
+   (`quant_pre_process` + `op_types_to_quantize=["Conv","MatMul","Gemm"]`)
+   → −2.5 test-A. Residual knob sweep (minmax/u8u8/calib-1024) all ≈ −2.5 →
+   noise floor. Final: `s2-004.int8.entropy-quint8.onnx` 9.05 MB,
+   p50 13.2 ms (fp32 17.7 ms).
+7. **New util** `scripts/eval_onnx.py` (eval existing ONNX on a split without
+   re-quantizing); `PYTHONUTF8=1` lesson for torch.onnx console output;
+   `python -u` for background logs (stdout block-buffering hid output).
+8. **Docs closed**: results.md P5 section (KD + quant tables + deviation),
+   subplan (P5 ✅), masterplan P5 (exit = PARTIAL, deviation documented),
+   HARDPOINT (int8 cliff entry), onnx/ cleaned to the two final artifacts.
+
+### Pending / next session (P6 — evaluation depth)
+- [ ] **P6 phase plan DONE** (`context/phases/phase7.md`, end of session) —
+      next session: rewrite subplan for P6, then build `latency.py`,
+      `policy.py`, slices + error analysis (20+ failures, test-B/C)
+- [ ] P7 after P6: Gradio demo (fp32 ONNX path), HF Hub upload, final report
+
+### Key decisions
+- **KD ships as a documented negative** (teacher>scores student everywhere,
+  soft targets don't transfer at 8M params/626-clip s2) — playbook timebox
+  honored; v2-core remains s2-004 (fp32 torch + bit-faithful fp32 ONNX +
+  9.05 MB int8).
+- int8 exit criteria (≤8 MB, ≤~1%) missed narrowly → documented deviation,
+  not a blocker: test-B delta is 1 clip; fp32 ONNX is the demo default.
+- **User ops rule: only one background process at a time** (system slowdown
+  report); background jobs need `-u` + UTF-8 for visible logs.
+
+## Session 8 — 2026-08-29: P4 ablation arms complete → v2-core = s2-004
+
+### Done
+1. **Harness extensions** (`turn_v2/train.py`, `models/pooling.py`):
+   `--label-smoothing`, `--replay-frac` (default 0.5 = P3 behavior),
+   `attention-end` pooling entry; smoke-tested all 4 pooling variants
+   (out_dim 384/768/768/1152).
+2. **10 ablation runs** (all auto-reported test-A/B/C now):
+   ARM-5 replay 0/0.25 (s2-005/006), ARM-3 smoothing 0.05 (s2-007),
+   ARM-4 k=1/4/full (s2-008/009/010), ARM-1 ASP (s1-002→s2-011),
+   ARM-2 attention-end (s1-003→s2-012).
+3. **Verdict: clean negative ablation — every arm lost to the P3 default on
+   test-A guard and/or test-B primary. v2-core = s2-004 unchanged.**
+   Key signals: replay is load-bearing (0% → test-A 0.770); k=2 sweet spot
+   (k=4/full buy 1 test-B clip for −4.6 test-A); ASP/end-bias don't help at
+   whisper-tiny scale (ASP −4.0 test-A, +1.6 ms latency).
+4. Docs: results.md P4 ablation table + verdict, subplan (phase complete),
+   masterplan P4 ticked, README already current (flags documented).
+
+### Pending / next session
+- [ ] P5 phase plan (`phase6.md`): distillation (Whisper Small teacher) +
+      ONNX int8 export with held-out calibration + TEN VAD demo swap
+- [ ] P5 timebox per masterplan: if KD not working by phase end → ship s2-004
+
+### Key decisions
+- **No combined-arms run needed**: no two arms won different axes, so the
+  final config stays s2-004 exactly (discipline rule held).
+- test-B 0.970 vs 1.000 = one clip (33 total) — treated as noise in selection.
+- ARM-2's s1 end-bias had best s1 test-C (0.512) — logged as future-work note,
+  not selected.
+
+### Key decisions
+- transformers 5.x Whisper mel-length validation handled by max_source_positions=400
+  + pretrained pos-emb slice (better than reference's random re-init for frozen use).
+- Overfit gate runs at lr 1e-3 (head-only); stage lrs remain masterplan defaults
+  except where results drove the s2 ladder.
+- test-B 33-clip noise (1 clip ≈ 3 pts) acknowledged; test-C build is the priority
+  validation before P4 burns compute on arms.

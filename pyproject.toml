@@ -15,11 +15,17 @@ dependencies = [
     "tqdm>=4.66",
     "python-dotenv>=1.0",
     "transformers>=5.16.1",
-    "torchaudio>=2.11.0",
+    "torchaudio==2.11.0+cu126",
     "onnx>=1.22.0",
     "onnxruntime>=1.29.0",
     "edge-tts>=7.2.8",
+    "onnxscript>=0.7.1",
+    "torch==2.13.0+cu126",
 ]
 
 [tool.uv]
 package = false
+index-strategy = "unsafe-best-match"
+
+[[tool.uv.index]]
+url = "https://download.pytorch.org/whl/cu126"

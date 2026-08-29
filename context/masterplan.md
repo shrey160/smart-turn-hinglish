@@ -44,7 +44,7 @@ binary: *complete* (agent should respond) vs *incomplete* (user still talking).
 | `scripts/download_data.py` | ✅ working | resumable streaming downloader; `--only train_pool|test_a` |
 | `scripts/structure_example_hinglish.py` | ✅ working | MP3→FLAC + Smart Turn folder layout |
 | `scripts/split_example_hinglish.py` | ✅ working | 80:20 stratified split |
-| `turn_v2/` | 🟡 started | `results.csv`/`results.md` seeded (P1 rows); model code to be built |
+| `turn_v2/` | ✅ built (Session 6) | dataset/augment/model/pooling/train/evaluate complete; s1+s2 trained; results.csv v2 (7 rows) + results.md thesis tables |
 
 ### 2.2 Missing before training can start
 
@@ -96,6 +96,15 @@ turn_v2/
 > original single-stage mixed-pool recipe. Stage 1 pretrains on original Smart
 > Turn `hin`+`eng` only; Stage 2 finetunes on the small existing TTS Hinglish
 > set + replay. mar/ben **dropped from training**. TTS scale-up **cancelled**.
+>
+> **AMENDMENT (2026-08-29, Session 6 — user-approved):** the locked s2
+> hyper (lr 1e-5, 2 ep, frozen encoder) produced a flat model (s2-001: test-B
+> 0.727/0.571) — those values assume full-encoder finetuning, but the frozen
+> encoder leaves only ~0.2M trainable params. Approved s2 recipe (evidence
+> s2-002..004 in `turn_v2/results.csv`): **lr 1e-4, 3 epochs, unfreeze last 2
+> encoder blocks** → test-B 0.970/0.968, test-A 0.882/0.886. ARM-4 is therefore
+> partially consumed by the default recipe; P4 ARM-4 becomes a k-sweep (1/4/all)
+> or full-unfreeze arm. Stage-1 lr 5e-5 kept as-is (works; test-A 0.833 head-only).
 
 ### Stage 1 — pretrain (`stage=s1`)
 
@@ -187,40 +196,61 @@ Each phase has explicit exit criteria — do not advance until met.
   only **test-C build remains → rolls into P3 phase scope** as parallel workstream
 
 ### P3 — Two-stage reproduction
-- [ ] `turn_v2/data/dataset.py` + `augment.py`; `models/model.py` (attention-mean baseline)
-- [ ] `--overfit 100` sanity gate — must pass before any full run
-- [ ] On-the-fly augmentation wired (telephony / noise / speed)
-- [ ] Pilot stats-QC admission (labels/durations/16 kHz) + TTS dev carve (~23 clips, seed 42)
-- [ ] test-C build: 1 MUCS test parquet → 1–2 h subset → delete parquet
-      (parallel workstream; forced alignment or complete-heavy fallback)
-- [ ] **Stage 1 run** (hin+eng ~7,200, lr 5e-5, 4 ep) → `ckpt_s1`; eval dev + A/B
-      (expect test-A ≈ Smart-Turn-level, test-B weak)
-- [ ] **Stage 2 run** (232 TTS ×2 + 50:50 hin/eng replay, lr 1e-5, 2 ep) from
-      `ckpt_s1` → `ckpt_s2`; eval dev + A/B/C; thesis table v2
-- **Exit:** `ckpt_s2` beats Smart Turn zero-shot on **test-B** (0.788 acc / 0.759 F1)
-      AND test-A regression vs `ckpt_s1` ≤ ~1–2%
+- [x] `turn_v2/data/dataset.py` + `augment.py`; `models/model.py` (attention-mean baseline)
+- [x] `--overfit 100` sanity gate — **PASS** (lr 1e-3 head-only; see HARDPOINT)
+- [x] On-the-fly augmentation wired (telephony / noise / speed)
+- [x] Pilot stats-QC admission (232 clips: 16 kHz mono, 110:122, mean 5.57 s) +
+      TTS dev carve (23 clips, seed 42) → `data/splits/dev_tts_v1.csv`
+- [x] test-C build: 1 MUCS test parquet → 846-clip / 76.8 min subset (17
+      speakers, 50:50) → parquet deleted (Session 7; transcript-guided
+      speech-active cuts + 200 ms pad on completes; see HARDPOINT)
+- [x] **Stage 1 run** (hin+eng 7,200, lr 5e-5, 4 ep) → `ckpt_s1` (s1-001: dev 0.851,
+      test-A 0.833/0.829, test-B 0.727/0.571)
+- [x] **Stage 2 run** (209 TTS ×2 + 50:50 replay; ladder s2-001→004, final recipe
+      lr 1e-4 / 3 ep / unfreeze-2 per §4 amendment) → `ckpt_s2` (s2-004: test-B
+      0.970/0.968, test-A 0.882/0.886); thesis table v2 in `results.md`
+- **Exit: MET by s2-004** — beats zero-shot on test-B (0.970 vs 0.788 acc) AND
+  test-A improved vs ckpt_s1 (+4.9 acc, no regression). test-C validation DONE
+  (Session 7): all neural models near-chance on MUCS tutorial monologue (domain
+  gap), s2-004 best neural at 0.600 acc (+6.1 over zero-shot) — s2 recipe holds.
 
 ### P4 — Ablation arms (one change per row, reusing P3 harness)
 > Stage dimension: architecture arms (ARM-1/2) change the head input dim →
 > **full s1+s2 rerun** required (ckpt_s1 incompatible). Training-only arms
 > (ARM-3/4/5) = cheap **s2-only reruns** from `ckpt_s1`.
-- [ ] ARM-1: ASP pooling — weighted mean + std → classifier in 768-dim (playbook §7.1) — full s1+s2
-- [ ] ARM-2: end-biased — concat mean of last ~50 encoder frames (playbook §7.2) — full s1+s2
-- [ ] ARM-3: label smoothing 0.05–0.1 — s2-only
-- [ ] ARM-4: unfreeze last 1–2 encoder blocks (if head-only plateaus) — s2-only
-- [ ] ARM-5: replay ratio sweep (0 / 25% / 50%) — s2-only, cheapest arm
-- **Exit:** ablation table complete; best arm selected as "v2-core"
+- [x] ARM-1: ASP pooling — full s1+s2 rerun (s1-002→s2-011): loses to default
+      (test-A 0.842 vs 0.882, test-B 0.909 vs 0.970, +1.6 ms latency)
+- [x] ARM-2: end-biased (attention-end) — full s1+s2 rerun (s1-003→s2-012):
+      loses (test-A 0.836)
+- [x] ARM-3: label smoothing 0.05 — s2-only (s2-007): loses (test-A 0.857)
+- [x] ARM-4: k-sweep k=1/4/full (s2-008/009/010): k=2 stays best on test-A;
+      k=4/full only gain 1 test-B clip (1.000 vs 0.970)
+- [x] ARM-5: replay 0/0.25 (s2-005/006): replay 0.5 default confirmed
+      (0% replay costs −11.2 test-A acc)
+- **Exit: MET — ablation table complete; v2-core = s2-004 (P3 default
+  unchanged). Clean negative ablation; details in `turn_v2/results.md`.**
 
-### P5 — Distillation + deployment
-- [ ] Teacher: Whisper Small encoder trained with the **same two-stage recipe**
-      (s1 hin+eng → s2 TTS+replay); **precompute logits** once
-- [ ] KD into v2-core student, applied at the student's **s2 run**: T=2–5, α≈0.5 (playbook §7.3)
-- [ ] `export.py`: ONNX fp32 → int8 static QDQ (QUInt8/QInt8, per-channel, Entropy)
-      with **held-out calibration from dev** (fixes the reference flaw)
-- [ ] Report FP32 vs int8 delta; watch for AVX2 U8S8 saturation cliff
-- [ ] TEN VAD swap-in for the demo's VAD gate (drop-in, 16 kHz frames)
-- **Timebox:** if KD not working by end of P5 → ship best P4 arm. No exceptions.
-- **Exit:** best model ≤ 8 MB int8, quantization delta ≤ ~1%
+### P5 — Distillation + deployment (2026-08-29, Session 9)
+- [x] Teacher: Whisper Small encoder, same two-stage recipe → `s1-004`
+      (dev 0.913, test-A 0.902) → `s2-013` (test-A 0.913, test-B 1.000,
+      test-C 0.603); logits precomputed over the 7,409-clip s2 pool.
+      Note: run on **CUDA torch (2.13.0+cu126, swapped in this session)** —
+      s1 teacher took ~5.5 min vs the 1.5 h CPU budget.
+- [x] KD into student at its s2 run (T=3, α=0.5) → `s2-014` + no-KD control
+      `s2-015`: **negative verdict** (test-B parity but −0.9 test-A vs control,
+      −4.5 vs s2-004) → **ship s2-004 per the timebox rule** ✅
+- [x] `export.py`: ONNX fp32 (opset 18, dynamic batch; bit-faithful to PyTorch)
+      → int8 static QDQ with **held-out calibration from dev** (200 clips) —
+      fixes the reference flaw. AVX2 cliff hit at −8.8; fixed by the reference
+      recipe (quant_pre_process + Conv/MatMul/Gemm only) → −2.5 residual
+      (noise floor across all remaining knobs). HARDPOINT entry + results.md.
+- [x] Report FP32 vs int8 delta: test-A −2.5 / test-B −3.0 (1 clip) /
+      test-C +0.4; 30.9 MiB fp32 / 9.05 MB int8 / p50 17.7→13.2 ms
+- [x] TEN VAD swap-in → **moved to P7** with the demo host (deviation logged in
+      phase6.md WS-C)
+- **Exit: PARTIAL — int8 = 9.05 MB (target ≤8) with delta −2.5/−3.0/+0.4
+  (target ≤~1%) — deviation documented (results.md §P5, HARDPOINT). KD closed
+  negative per timebox; ship = s2-004 (fp32 + int8 ONNX artifacts on disk).**
 
 ### P6 — Evaluation depth
 - [ ] `latency.py`: accuracy/F1 vs trailing context 0.5/1/2/4/8 s

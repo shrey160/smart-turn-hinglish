@@ -45,6 +45,11 @@ def iter_clips(split):
         for label_dir in sorted(base.iterdir()):
             for f in sorted(label_dir.glob("*.flac")):
                 yield f, "tts-hinglish", label_dir.name
+    elif split == "test_c":
+        base = ROOT / "data" / "test_c" / "mucs-hinglish"
+        for label_dir in sorted(base.iterdir()):
+            for f in sorted(label_dir.glob("*.wav")):
+                yield f, "mucs-hinglish", label_dir.name
     else:
         raise ValueError(f"unknown split {split}")
 

@@ -1,0 +1,26 @@
+stage=s1 device=cuda train_n=7200 epochs=4 lr=5e-05 bs=32
+  dev[dev_v1] n=800
+params total=87.72M trainable=0.41M
+epoch 1/4 train_loss=0.6112 lr=4.95e-05 elapsed=67s
+[step 225 | dev_v1] n=800 acc=0.815 f1=0.823 lat p50 e2e=14.7ms fwd=14.7ms
+  new best dev_f1=0.8230 -> C:\Shrey_Projs\AI_ML_Projs\voice_based\pipe_cat_reference\turn_v2\ckpt\s1-004\best.pt
+epoch 2/4 train_loss=0.3081 lr=3.46e-05 elapsed=150s
+[step 450 | dev_v1] n=800 acc=0.900 f1=0.900 lat p50 e2e=14.8ms fwd=14.8ms
+  new best dev_f1=0.9002 -> C:\Shrey_Projs\AI_ML_Projs\voice_based\pipe_cat_reference\turn_v2\ckpt\s1-004\best.pt
+epoch 3/4 train_loss=0.2443 lr=1.11e-05 elapsed=237s
+[step 675 | dev_v1] n=800 acc=0.912 f1=0.913 lat p50 e2e=15.3ms fwd=15.3ms
+  new best dev_f1=0.9132 -> C:\Shrey_Projs\AI_ML_Projs\voice_based\pipe_cat_reference\turn_v2\ckpt\s1-004\best.pt
+epoch 4/4 train_loss=0.2285 lr=0.00e+00 elapsed=325s
+[step 900 | dev_v1] n=800 acc=0.912 f1=0.912 lat p50 e2e=15.6ms fwd=15.6ms
+loading best ckpt (dev_f1=0.9132 @ step 675)
+[final dev_v1] n=800 acc=0.912 f1=0.913 lat p50 e2e=15.4ms fwd=15.4ms
+[final test_a] n=1200 acc=0.902 f1=0.904 lat p50 e2e=15.5ms fwd=15.5ms
+    lang=eng               n=  600 acc=0.895 f1=0.898
+    lang=hin               n=  600 acc=0.910 f1=0.910
+    midfiller=False        n=  729 acc=0.914 f1=0.915
+    midfiller=True         n=  471 acc=0.885 f1=0.886
+    endfiller=False        n=  942 acc=0.889 f1=0.913
+    endfiller=True         n=  258 acc=0.953 f1=0.000
+[final test_b] n=33 acc=0.697 f1=0.545 lat p50 e2e=15.5ms fwd=15.5ms
+[final test_c] n=846 acc=0.508 f1=0.432 lat p50 e2e=16.2ms fwd=16.1ms
+results row appended: s1-004
