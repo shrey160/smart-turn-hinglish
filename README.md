@@ -11,7 +11,7 @@ uses.
 
 - **Weights:** [Shrey160/hinglish-turn-v2](https://huggingface.co/Shrey160/hinglish-turn-v2) — fp32 (bit-faithful) + int8 (9 MB) ONNX, torch ckpt, feature extractor config
 - **Report:** [REPORT.md](REPORT.md) — framing, dataset audit, strategy, experiments, errors, limitations
-- **Demo:** `turn_v2/app.py` (Gradio; mic/file → verdict + p + inference ms + simulated streaming)
+- **Demo:** [`app/`](app/) (Gradio; mic/file → verdict + p + inference ms + simulated streaming) — see [`app/README.md`](app/README.md)
 - **Curated numbers:** [`turn_v2/results.md`](turn_v2/results.md) · machine log: `turn_v2/results.csv`
 
 ## Results
@@ -58,8 +58,8 @@ the report treats this as a first-class result.
 
 ```powershell
 uv sync                                              # env (Python 3.11)
-uv run python turn_v2/app.py --selftest              # demo selftest
-uv run python turn_v2/app.py                         # Gradio demo UI
+uv run python app/app.py --selftest                  # demo selftest
+uv run python app/app.py                             # Gradio demo UI
 
 uv run python -m turn_v2.train --stage s1 --overfit 100        # sanity gate
 uv run python -m turn_v2.train --stage s1 --workers 4          # stage 1
@@ -79,12 +79,13 @@ Full reproduce commands: [REPORT.md §9](REPORT.md); module/CLI docs:
 
 ```
 ├── smart_turn_reference/   # Pipecat baseline (READ-ONLY; imported, never modified)
+├── app/                    # demo app (self-contained): app.py, requirements.txt, README
 ├── turn_v2/                # our model: data/, models/, train, evaluate, export,
-│                           #   latency, policy, eval_common, app (demo), results.{md,csv}
+│                           #   latency, policy, eval_common, results.{md,csv}
 ├── scripts/                # data ops: download, TTS generation, test-C build, HF upload
 ├── data/                   # datasets (gitignored)
 ├── models_ref/             # baseline ONNX (gitignored)
-├── context/                # masterplan → phases → subplan → HARDPOINT → progress
+├── context/                # internal planning (untracked)
 └── REPORT.md               # final self-written report
 ```
 

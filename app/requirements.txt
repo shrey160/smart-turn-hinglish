@@ -1,0 +1,8 @@
+onnxruntime
+transformers
+huggingface_hub
+numpy
+librosa
+soundfile
+ten-vad
+gradio

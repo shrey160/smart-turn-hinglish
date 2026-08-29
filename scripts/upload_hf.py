@@ -204,7 +204,7 @@ def main():
             path_or_fileobj=SPACE_CARD.replace("{REPO_ID}", REPO_ID).encode("utf-8"),
             path_in_repo="README.md", repo_id=SPACE_ID, repo_type="space",
         )
-        api.upload_file(path_or_fileobj=str(ROOT / "turn_v2" / "app.py"), path_in_repo="app.py", repo_id=SPACE_ID, repo_type="space")
+        api.upload_file(path_or_fileobj=str(ROOT / "app" / "app.py"), path_in_repo="app.py", repo_id=SPACE_ID, repo_type="space")
         api.upload_file(path_or_fileobj=SPACE_REQUIREMENTS.encode("utf-8"), path_in_repo="requirements.txt", repo_id=SPACE_ID, repo_type="space")
         print(f"space: https://huggingface.co/spaces/{SPACE_ID}")
 
