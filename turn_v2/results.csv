@@ -1,0 +1,3 @@
+run_id,timestamp,config_tag,change_summary,seed,train_n,dev_f1,dev_acc,testA_f1,testA_acc,testB_f1,testB_acc,testC_f1,testC_acc,params_M,latency_ms_p50_cpu,notes
+p1-001,2026-08-29,zero-shot-smart-turn-v3.2-int8,Smart Turn v3.2 int8 CPU zero-shot (models_ref/smart-turn-v3.2-cpu.onnx),NA,0,,,,0.930,0.927,0.759,0.788,,,,15,int8 file 8.7 MB; per-clip p50 on CPU incl. feature extraction
+p1-002,2026-08-29,silence-threshold-T0.05,Trailing-silence heuristic (30ms frames, RMS floor 0.01); best T by F1 on test-A,NA,0,,,,0.560,0.537,0.622,0.485,,,,,near-chance; acc-best T=0.20s gives testA acc 0.578 / F1 0.534
